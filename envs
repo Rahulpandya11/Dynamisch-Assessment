@@ -1,20 +1,12 @@
-NOTE all the things will be removed within next 36 hours Please check things before that
-
-=== Magento 2 Stack — Credentials (send via secure channel) ===
-
-EC2 Public IP:     13.205.76.100
-Elastic IP:        13.205.76.100
-Hosts file entry:  13.205.76.100  test.dyna.com
-
---- Magento Admin ---
-URL:      https://test.dyna.com/dynasecure
-Username: admin_dyna
-Password: Admin_P@ss123!
-
---- phpMyAdmin ---
-URL:      https://test.dyna.com/pma/
-Username: pmadmin
-Password: secretpassword
-
---- GitHub Repo ---
-URL: https://github.com/Rahulpandya11/Dynamisch-Assessment.git
+MYSQL_ROOT_PASSWORD=change_me_strong_root_password
+MYSQL_DATABASE=magento
+MYSQL_USER=magento
+MYSQL_PASSWORD=change_me_strong_db_password
+MAGENTO_ADMIN_FIRSTNAME=Admin
+MAGENTO_ADMIN_LASTNAME=User
+MAGENTO_ADMIN_EMAIL=admin@test.dyna.com
+MAGENTO_ADMIN_USER=your_admin_username
+MAGENTO_ADMIN_PASSWORD=change_me_Admin_Password1!
+MAGENTO_ADMIN_URI=your_custom_admin_path
+ES_JAVA_OPTS="-Xms128m -Xmx128m"
+REDIS_PASSWORD=change_me_strong_redis_password
