@@ -1,0 +1,20 @@
+NOTE all the things will be removed within next 36 hours Please check things before that
+
+=== Magento 2 Stack — Credentials (send via secure channel) ===
+
+EC2 Public IP:     13.205.76.100
+Elastic IP:        13.205.76.100
+Hosts file entry:  13.205.76.100  test.dyna.com
+
+--- Magento Admin ---
+URL:      https://test.dyna.com/dynasecure
+Username: admin_dyna
+Password: Admin_P@ss123!
+
+--- phpMyAdmin ---
+URL:      https://test.dyna.com/pma/
+Username: pmadmin
+Password: secretpassword
+
+--- GitHub Repo ---
+URL: https://github.com/Rahulpandya11/Dynamisch-Assessment.git
