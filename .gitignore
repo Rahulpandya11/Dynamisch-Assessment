@@ -3,3 +3,5 @@ nginx/ssl/
 nginx/auth/.htpasswd
 magento/app/
 *.log
+nginx/ssl/*.key
+!nginx/ssl/*.crt
