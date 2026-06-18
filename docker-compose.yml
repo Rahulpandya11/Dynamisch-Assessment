@@ -1,0 +1,231 @@
+version: "3.9"
+
+networks:
+  internal:
+    driver: bridge
+  frontend:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  elasticsearch_data:
+  redis_data:
+
+services:
+
+  mysql:
+    image: mysql:8.0.36
+    container_name: magento_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/magento.cnf:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
+  redis:
+    image: redis:8.0-alpine
+    container_name: magento_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+
+  elasticsearch:
+    image: elasticsearch:7.17.20
+    container_name: magento_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=${ES_JAVA_OPTS}
+      - xpack.security.enabled=false
+      - cluster.name=magento
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -q 'status'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  php-fpm:
+    build:
+      context: ./magento
+      dockerfile: Dockerfile
+      args:
+        HOST_UID: "1001"
+        HOST_GID: "1001"
+    image: magento_phpfpm:local
+    container_name: magento_phpfpm
+    restart: unless-stopped
+    user: "1001:1001"
+    environment:
+      MAGENTO_DB_HOST: mysql
+      MAGENTO_DB_NAME: ${MYSQL_DATABASE}
+      MAGENTO_DB_USER: ${MYSQL_USER}
+      MAGENTO_DB_PASSWORD: ${MYSQL_PASSWORD}
+      MAGENTO_REDIS_HOST: redis
+      MAGENTO_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PHP_INI_SCAN_DIR: "/usr/local/etc/php/conf.d"
+      MAGENTO_ES_HOST: elasticsearch
+      MAGENTO_BASE_URL: "https://test.dyna.com/"
+      MAGENTO_ADMIN_URI: ${MAGENTO_ADMIN_URI}
+      MAGENTO_ADMIN_USER: ${MAGENTO_ADMIN_USER}
+      MAGENTO_ADMIN_PASSWORD: ${MAGENTO_ADMIN_PASSWORD}
+      MAGENTO_ADMIN_EMAIL: ${MAGENTO_ADMIN_EMAIL}
+    volumes:
+      - ./magento/app:/var/www/html:rw
+      - ./php-fpm/www.conf:/usr/local/etc/php-fpm.d/www.conf:ro
+      - ./php-fpm/magento.ini:/usr/local/etc/php/conf.d/magento.ini:ro
+    networks:
+      - internal
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  varnish:
+    build:
+      context: ./varnish
+      dockerfile: Dockerfile
+    image: magento_varnish:local
+    container_name: magento_varnish
+    restart: unless-stopped
+    networks:
+      - internal
+    depends_on:
+      - php-fpm
+    deploy:
+      resources:
+        limits:
+          memory: 180M
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: magento_nginx:local
+    container_name: magento_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/auth:/etc/nginx/auth:ro
+      - ./magento/app:/var/www/html:ro
+    networks:
+      - internal
+      - frontend
+    depends_on:
+      - varnish
+      - php-fpm
+      - phpmyadmin
+    deploy:
+      resources:
+        limits:
+          memory: 80M
+
+  cron:
+    build:
+      context: ./magento
+      dockerfile: Dockerfile
+      args:
+        HOST_UID: "1001"
+        HOST_GID: "1001"
+    image: magento_phpfpm:local
+    container_name: magento_cron
+    restart: unless-stopped
+    user: "1001:1001"
+    command: ["/usr/local/bin/run-cron.sh"]
+    environment:
+      MAGENTO_DB_HOST: mysql
+      MAGENTO_DB_NAME: ${MYSQL_DATABASE}
+      MAGENTO_DB_USER: ${MYSQL_USER}
+      MAGENTO_DB_PASSWORD: ${MYSQL_PASSWORD}
+      MAGENTO_REDIS_HOST: redis
+      MAGENTO_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PHP_INI_SCAN_DIR: "/usr/local/etc/php/conf.d"
+    volumes:
+      - ./magento/app:/var/www/html:rw
+      - ./php-fpm/cli-memory.ini:/usr/local/etc/php/conf.d/cli-memory.ini:ro
+    networks:
+      - internal
+    depends_on:
+      - php-fpm
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache
+    container_name: magento_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 50M
+    networks:
+      - internal
+    depends_on:
+      mysql:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 100M
